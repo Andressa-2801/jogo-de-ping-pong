@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo de Ping Pong</title>
+    <style>
+        :root {
+            --background-color: #2c3e50;
+            --paddle-color: white;
+            --ball-color: white;
+            --score-color: #ecf0f1;
+            --text-color: #ecf0f1;
+            --button-color: #27ae60;
+            --button-hover-color: #2ecc71;
+        }
+
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas {
+            background-color: #34495e;
+            border: 2px solid var(--paddle-color);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            touch-action: none; /* Previne o navegador de fazer zoom ou scroll em toques */
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: var(--button-color);
+            color: white;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: var(--button-hover-color);
+        }
+
+        #gameMessage {
+            margin-top: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <h1>Ping Pong</h1>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="controls">
+            <button id="restartButton">Reiniciar Jogo</button>
+        </div>
+        <div id="gameMessage"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const restartButton = document.getElementById('restartButton');
+            const gameMessage = document.getElementById('gameMessage');
+
+            // Redimensiona o canvas para ser responsivo
+            function resizeCanvas() {
+                const parent = canvas.parentElement;
+                const parentWidth = parent.clientWidth * 0.9;
+                const parentHeight = window.innerHeight * 0.7;
+
+                const aspectRatio = 4 / 3;
+                if (parentWidth / parentHeight > aspectRatio) {
+                    canvas.height = parentHeight;
+                    canvas.width = parentHeight * aspectRatio;
+                } else {
+                    canvas.width = parentWidth;
+                    canvas.height = parentWidth / aspectRatio;
+                }
+            }
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // Posição inicial dos elementos
+            const paddleWidth = 15;
+            const paddleHeight = 100;
+            const ballRadius = 10;
+            let ballSpeed = 5;
+            let playerSpeed = 8;
+            let computerSpeed = 5;
+
+            let player = {
+                x: 0,
+                y: canvas.height / 2 - paddleHeight / 2,
+                width: paddleWidth,
+                height: paddleHeight,
+                color: 'var(--paddle-color)',
+                score: 0
+            };
+
+            let computer = {
+                x: canvas.width - paddleWidth,
+                y: canvas.height / 2 - paddleHeight / 2,
+                width: paddleWidth,
+                height: paddleHeight,
+                color: 'var(--paddle-color)',
+                score: 0
+            };
+
+            let ball = {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                radius: ballRadius,
+                speed: ballSpeed,
+                velocityX: ballSpeed,
+                velocityY: ballSpeed,
+                color: 'var(--ball-color)'
+            };
+
+            let isGamePaused = true;
+            let isGameOver = false;
+
+            // Desenha um retângulo (usado para as raquetes)
+            function drawRect(x, y, width, height, color) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y, width, height);
+            }
+
+            // Desenha um círculo (usado para a bola)
+            function drawCircle(x, y, radius, color) {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2, false);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Desenha o texto (usado para a pontuação)
+            function drawText(text, x, y, color) {
+                ctx.fillStyle = color;
+                ctx.font = '75px Arial';
+                ctx.fillText(text, x, y);
+            }
+
+            // Reseta a bola para o centro
+            function resetBall() {
+                ball.x = canvas.width / 2;
+                ball.y = canvas.height / 2;
+                ball.speed = ballSpeed;
+                ball.velocityX = (Math.random() > 0.5 ? 1 : -1) * ballSpeed;
+                ball.velocityY = (Math.random() > 0.5 ? 1 : -1) * ballSpeed;
+            }
+
+            // Movimento da raquete do computador (IA simples)
+            function computerMovement() {
+                let computerYCenter = computer.y + computer.height / 2;
+                let ballYCenter = ball.y;
+
+                if (computerYCenter < ballYCenter - 35) {
+                    computer.y += computerSpeed;
+                } else if (computerYCenter > ballYCenter + 35) {
+                    computer.y -= computerSpeed;
+                }
+            }
+            
+            // Lida com colisões da bola
+            function collision(b, p) {
+                p.top = p.y;
+                p.bottom = p.y + p.height;
+                p.left = p.x;
+                p.right = p.x + p.width;
+
+                b.top = b.y - b.radius;
+                b.bottom = b.y + b.radius;
+                b.left = b.x - b.radius;
+                b.right = b.x + b.radius;
+
+                return b.right > p.left && b.top < p.bottom && b.left < p.right && b.bottom > p.top;
+            }
+
+            // Função principal de atualização do jogo
+            function update() {
+                if (isGamePaused || isGameOver) {
+                    return;
+                }
+                
+                // Atualiza a posição da bola
+                ball.x += ball.velocityX;
+                ball.y += ball.velocityY;
+
+                // Lida com a colisão nas paredes superior e inferior
+                if (ball.y + ball.radius > canvas.height || ball.y - ball.radius < 0) {
+                    ball.velocityY = -ball.velocityY;
+                }
+
+                // Lida com a colisão nas raquetes
+                let playerOrComputer = (ball.x < canvas.width / 2) ? player : computer;
+                if (collision(ball, playerOrComputer)) {
+                    // Inverte a direção horizontal da bola
+                    let collidePoint = ball.y - (playerOrComputer.y + playerOrComputer.height / 2);
+                    collidePoint = collidePoint / (playerOrComputer.height / 2);
+                    let angleRad = (Math.PI / 4) * collidePoint;
+                    
+                    ball.velocityX = (playerOrComputer === player ? 1 : -1) * ball.speed * Math.cos(angleRad);
+                    ball.velocityY = ball.speed * Math.sin(angleRad);
+                    
+                    // Aumenta a velocidade da bola gradualmente
+                    ball.speed += 0.2;
+                }
+
+                // Lida com a pontuação
+                if (ball.x - ball.radius < 0) {
+                    computer.score++;
+                    resetBall();
+                    checkGameOver();
+                } else if (ball.x + ball.radius > canvas.width) {
+                    player.score++;
+                    resetBall();
+                    checkGameOver();
+                }
+
+                // Movimento do computador
+                computerMovement();
+
+                // Mantém as raquetes dentro do canvas
+                player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+                computer.y = Math.max(0, Math.min(canvas.height - computer.height, computer.y));
+            }
+            
+            // Checa se o jogo acabou
+            function checkGameOver() {
+                const maxScore = 5; // Quem atingir 5 pontos primeiro vence
+                if (player.score >= maxScore) {
+                    gameMessage.textContent = "Você venceu!";
+                    isGameOver = true;
+                } else if (computer.score >= maxScore) {
+                    gameMessage.textContent = "O Computador venceu!";
+                    isGameOver = true;
+                }
+            }
+
+            // Renderiza todos os elementos do jogo na tela
+            function render() {
+                // Fundo do canvas
+                drawRect(0, 0, canvas.width, canvas.height, 'var(--background-color)');
+
+                // Linha divisória
+                drawRect(canvas.width / 2 - 2, 0, 4, canvas.height, 'white');
+
+                // Placar
+                drawText(player.score, canvas.width / 4, canvas.height / 5, 'var(--score-color)');
+                drawText(computer.score, 3 * canvas.width / 4, canvas.height / 5, 'var(--score-color)');
+
+                // Raquetes
+                drawRect(player.x, player.y, player.width, player.height, player.color);
+                drawRect(computer.x, computer.y, computer.width, computer.height, computer.color);
+
+                // Bola
+                drawCircle(ball.x, ball.y, ball.radius, ball.color);
+            }
+
+            // Loop principal do jogo
+            function gameLoop() {
+                update();
+                render();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // Eventos de entrada do usuário (mouse e touch)
+            canvas.addEventListener('mousemove', (e) => {
+                let rect = canvas.getBoundingClientRect();
+                player.y = e.clientY - rect.top - player.height / 2;
+            });
+            
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault(); // Previne o scroll da página
+                let rect = canvas.getBoundingClientRect();
+                let touch = e.touches[0];
+                player.y = touch.clientY - rect.top - player.height / 2;
+            });
+
+            // Lida com o primeiro clique/toque para começar o jogo
+            canvas.addEventListener('mousedown', () => {
+                if (isGamePaused) {
+                    gameMessage.textContent = "";
+                    isGamePaused = false;
+                    resetBall();
+                }
+            });
+
+            canvas.addEventListener('touchstart', () => {
+                if (isGamePaused) {
+                    gameMessage.textContent = "";
+                    isGamePaused = false;
+                    resetBall();
+                }
+            });
+
+            // Botão de reiniciar
+            restartButton.addEventListener('click', () => {
+                player.score = 0;
+                computer.score = 0;
+                isGameOver = false;
+                isGamePaused = true;
+                gameMessage.textContent = "Toque ou clique para começar!";
+                resetBall();
+                render(); // Renderiza a tela inicial
+            });
+
+            // Inicia o jogo
+            gameMessage.textContent = "Toque ou clique para começar!";
+            gameLoop();
+        });
+    </script>
+
+</body>
+</html>
